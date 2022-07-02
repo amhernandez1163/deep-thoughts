@@ -1,6 +1,6 @@
+const { AuthenticationError } = require("apollo-server-express");
 const { User, Thought } = require("../models");
 const { signToken } = require("../utils/auth");
-const { AuthenticationError } = require("apollo-server-express");
 
 const resolvers = {
   Query: {
@@ -36,19 +36,29 @@ const resolvers = {
       return Thought.findOne({ _id });
     },
   },
-  Mutation: {
-    addFriend: async (parent, { friendId }, context) => {
-      if (context.user) {
-        const updatedUser = await User.findOneAndUpdate(
-          { _id: context.user._id },
-          { $addToSet: { friends: friendId } },
-          { new: true }
-        ).populate("friends");
 
-        return updatedUser;
+  Mutation: {
+    addUser: async (parent, args) => {
+      const user = await User.create(args);
+      const token = signToken(user);
+
+      return { token, user };
+    },
+    login: async (parent, { email, password }) => {
+      const user = await User.findOne({ email });
+
+      if (!user) {
+        throw new AuthenticationError("Incorrect credentials");
       }
 
-      throw new AuthenticationError("You need to be logged in!");
+      const correctPw = await user.isCorrectPassword(password);
+
+      if (!correctPw) {
+        throw new AuthenticationError("Incorrect credentials");
+      }
+
+      const token = signToken(user);
+      return { token, user };
     },
     addThought: async (parent, args, context) => {
       if (context.user) {
@@ -85,28 +95,18 @@ const resolvers = {
 
       throw new AuthenticationError("You need to be logged in!");
     },
+    addFriend: async (parent, { friendId }, context) => {
+      if (context.user) {
+        const updatedUser = await User.findOneAndUpdate(
+          { _id: context.user._id },
+          { $addToSet: { friends: friendId } },
+          { new: true }
+        ).populate("friends");
 
-    addUser: async (parent, args) => {
-      const user = await User.create(args);
-      const token = signToken(user);
-
-      return { token, user };
-    },
-    login: async (parent, { email, password }) => {
-      const user = await User.findOne({ email });
-
-      if (!user) {
-        throw new AuthenticationError("Incorrect credentials");
+        return updatedUser;
       }
 
-      const correctPw = await user.isCorrectPassword(password);
-
-      if (!correctPw) {
-        throw new AuthenticationError("Incorrect credentials");
-      }
-
-      const token = signToken(user);
-      return { token, user };
+      throw new AuthenticationError("You need to be logged in!");
     },
   },
 };
